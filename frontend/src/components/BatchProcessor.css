@@ -1,0 +1,20 @@
+.progress-section { margin-top: 16px; }
+.progress-label {
+  display: flex; justify-content: space-between;
+  font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px;
+}
+.progress-bar-wrap {
+  height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+.progress-status {
+  font-size: 0.75rem; color: var(--text-muted);
+  margin-top: 6px; font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
