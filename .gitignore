@@ -71,6 +71,6 @@ Thumbs.db
 
 # Data files
 data/contracts/
-*.json
+
 __init__.py
 *.bin
