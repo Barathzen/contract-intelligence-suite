@@ -3,6 +3,7 @@ import Hero from './components/Hero.jsx';
 import Uploader from './components/Uploader.jsx';
 import BatchProcessor from './components/BatchProcessor.jsx';
 import ResultsTable from './components/ResultsTable.jsx';
+import ContractDetailModal from './components/ContractDetailModal.jsx';
 import JSONModal from './components/JSONModal.jsx';
 import './App.css';
 
@@ -18,9 +19,15 @@ window.toast = (msg, type = 'info') => {
 };
 
 export default function App() {
-  const [stats, setStats] = useState({ available: '—', processed: '—', types: '—', rate: '—' });
+  const [stats, setStats] = useState({
+    available: '—',
+    processed: '—',
+    types: '—',
+    avgConfidence: '—',
+  });
   const [results, setResults] = useState([]);
   const [selectedContract, setSelectedContract] = useState(null);
+  const [jsonModal, setJsonModal] = useState(null);
 
   const fetchHealth = async () => {
     try {
@@ -45,14 +52,23 @@ export default function App() {
       setResults(resList);
 
       const types = new Set(resList.map(r => r.contract_type?.label || 'Other'));
-      const errored = resList.filter(r => r.error || !r.contract_type).length;
-      const rate = resList.length > 0 ? Math.round((resList.length - errored) / resList.length * 100) + '%' : '—';
-      
+      const withConf = resList.filter(
+        (r) => typeof r.confidence_summary?.overall_confidence === 'number'
+      );
+      const avgConfidence =
+        withConf.length > 0
+          ? `${Math.round(
+              (withConf.reduce((s, r) => s + r.confidence_summary.overall_confidence, 0) /
+                withConf.length) *
+                100
+            )}%`
+          : '—';
+
       setStats((prev) => ({
         ...prev,
         types: types.size || '—',
         processed: resList.length,
-        rate
+        avgConfidence,
       }));
     } catch (e) {
       window.toast('Failed to load results', 'error');
@@ -89,7 +105,16 @@ export default function App() {
 
       <div className="main-grid">
         <div className="left-panel">
-          <Uploader onUploadSuccess={() => { fetchResults(); fetchHealth(); }} onViewDetails={setSelectedContract} />
+          <Uploader
+            onUploadSuccess={() => { fetchResults(); fetchHealth(); }}
+            onViewJson={(data) =>
+              setJsonModal({
+                data,
+                contractFile: data?.source_metadata?.file_name || 'Contract',
+              })
+            }
+            onViewRoleViews={setSelectedContract}
+          />
           <BatchProcessor onRefresh={() => { fetchResults(); fetchHealth(); }} />
         </div>
         <div className="right-panel" id="results-section">
@@ -98,10 +123,16 @@ export default function App() {
       </div>
 
       {selectedContract && (
-        <JSONModal 
-          contractFile={selectedContract.source_file} 
-          data={selectedContract} 
-          onClose={() => setSelectedContract(null)} 
+        <ContractDetailModal
+          data={selectedContract}
+          onClose={() => setSelectedContract(null)}
+        />
+      )}
+      {jsonModal && (
+        <JSONModal
+          contractFile={jsonModal.contractFile}
+          data={jsonModal.data}
+          onClose={() => setJsonModal(null)}
         />
       )}
     </div>

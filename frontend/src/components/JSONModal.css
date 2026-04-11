@@ -1,40 +1,93 @@
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-  backdrop-filter: blur(4px); z-index: 1000;
-  display: none; align-items: center; justify-content: center;
+/* Namespaced so these rules never clash with ContractDetailModal (which uses .modal-overlay, .modal-header, etc.) */
+.json-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 1rem;
 }
-.modal-overlay.open { display: flex; }
-.modal {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); width: 100%; max-width: 720px;
-  max-height: 90vh; display: flex; flex-direction: column;
-  animation: modalIn 0.22s ease;
+.json-modal-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: jsonModalIn 0.22s ease;
 }
-@keyframes modalIn { from { opacity:0; transform: scale(0.96) translateY(8px); } to { opacity:1; transform: none; } }
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px; border-bottom: 1px solid var(--border);
+@keyframes jsonModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.modal-header h3 { font-size: 1rem; font-weight: 700; }
-.modal-close {
-  background: none; border: none; color: var(--text-muted);
-  font-size: 1.2rem; cursor: pointer; padding: 4px 8px;
-  border-radius: 6px; transition: background 0.15s;
+.json-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
 }
-.modal-close:hover { background: var(--surface2); color: var(--text); }
-.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.json-modal-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.json-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.json-modal-close:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.json-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
 .json-viewer {
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.78rem; line-height: 1.7;
-  overflow-x: auto; white-space: pre;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
   color: var(--text-dim);
 }
-.json-key { color: #7dd3fc; }
-.json-str { color: #86efac; }
-.json-bool-true { color: var(--green); }
-.json-bool-false { color: var(--red); }
-.json-num { color: #fcd34d; }
-.json-null { color: var(--text-muted); }
+.json-key {
+  color: #7dd3fc;
+}
+.json-str {
+  color: #86efac;
+}
+.json-bool-true {
+  color: var(--green);
+}
+.json-bool-false {
+  color: var(--red);
+}
+.json-num {
+  color: #fcd34d;
+}
+.json-null {
+  color: var(--text-muted);
+}

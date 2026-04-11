@@ -50,7 +50,7 @@ async def _process_file(pdf_path: Path, output_dir: Path, semaphore: asyncio.Sem
         _state.current_file = pdf_path.name
         start = time.time()
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             # Step 1: Extract PDF text
             from app.services.extractor import extract_pdf
@@ -71,6 +71,12 @@ async def _process_file(pdf_path: Path, output_dir: Path, semaphore: asyncio.Sem
             out_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
             _state.completed_files.append(out_path.name)
             _state.processed += 1
+            try:
+                from app.services.metrics_engine import save_metrics
+
+                save_metrics(result)
+            except Exception as mex:
+                print(f"[METRICS] Failed to save metrics for {pdf_path.name}: {mex}")
 
         except Exception as exc:
             _state.failed += 1

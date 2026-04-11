@@ -5,6 +5,11 @@ main.py  — FastAPI application entry point
 from __future__ import annotations
 
 import os
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+import logging
+# Silence ChromaDB's noisy embedding-ID warnings
+logging.getLogger("chromadb.segment.impl.vector.local_hnsw").setLevel(logging.ERROR)
+logging.getLogger("chromadb.segment.impl.vector.local_persistent_hnsw").setLevel(logging.ERROR)
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,6 +21,7 @@ from fastapi.responses import FileResponse
 load_dotenv()
 
 from app.routes.contract_routes import router as contract_router
+from app.routes.intelligence_routes import router as intelligence_router
 
 # ──────────────────────────────────────────────
 # App factory
@@ -43,6 +49,7 @@ app.add_middleware(
 # ──────────────────────────────────────────────
 
 app.include_router(contract_router)
+app.include_router(intelligence_router)
 
 # ──────────────────────────────────────────────
 # Startup: ensure required directories exist
@@ -52,10 +59,14 @@ app.include_router(contract_router)
 async def startup_event():
     contracts_dir = os.getenv("CONTRACTS_DIR", "data/contracts")
     output_dir = os.getenv("OUTPUT_DIR", "data/output")
+    metrics_dir = os.getenv("METRICS_DIR", "data/metrics")
+    gt_dir = os.getenv("GROUND_TRUTH_DIR", "data/ground_truth")
     Path(contracts_dir).mkdir(parents=True, exist_ok=True)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     Path("data/tmp").mkdir(parents=True, exist_ok=True)
-    print(f"✅ Contract Intelligence Engine ready (Groq + RAG).")
+    Path(metrics_dir).mkdir(parents=True, exist_ok=True)
+    Path(gt_dir).mkdir(parents=True, exist_ok=True)
+    print(f"[READY] Contract Intelligence Engine ready (Groq + RAG).")
     print(f"   PDFs         : {contracts_dir}")
     print(f"   Output       : {output_dir}")
     print(f"   Vector store : {os.getenv('VECTORSTORE_DIR', 'data/vectorstore')}")

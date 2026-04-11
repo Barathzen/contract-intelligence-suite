@@ -28,13 +28,13 @@ export default function JSONModal({ contractFile, data, onClose }) {
   };
 
   return (
-    <div className="modal-overlay open" ref={overlayRef} onClick={handleOverlayClick}>
-      <div className="modal">
-        <div className="modal-header">
+    <div className="json-modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
+      <div className="json-modal-panel">
+        <div className="json-modal-header">
           <h3>{contractFile}</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button type="button" className="json-modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body">
+        <div className="json-modal-body">
           <div 
             className="json-viewer" 
             dangerouslySetInnerHTML={{ __html: colorizeJson(data) }} 
