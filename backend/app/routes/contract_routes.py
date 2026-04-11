@@ -22,12 +22,22 @@ from app.services.batch_processor import get_batch_state, run_batch
 from app.services.chunker import chunk_document
 from app.services.extractor import extract_pdf
 from app.services.llm_processor import process_document_rag
+from app.services.metrics_engine import load_metrics_file, save_metrics
 
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
-_CONTRACTS_DIR = os.getenv("CONTRACTS_DIR", "/mnt/B89EC7B79EC76D06/contract-intelligence/data/contracts")
-_OUTPUT_DIR    = os.getenv("OUTPUT_DIR",    "/mnt/B89EC7B79EC76D06/contract-intelligence/data/output")
-_UPLOAD_TMP    = Path("/mnt/B89EC7B79EC76D06/contract-intelligence/data/tmp")
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _env_path(key: str, default_relative: str) -> str:
+    raw = os.getenv(key, default_relative)
+    p = Path(raw)
+    return str(p.resolve() if p.is_absolute() else (_BACKEND_DIR / p).resolve())
+
+
+_CONTRACTS_DIR = _env_path("CONTRACTS_DIR", str(_BACKEND_DIR.parent / "data" / "contracts"))
+_OUTPUT_DIR = _env_path("OUTPUT_DIR", str(_BACKEND_DIR.parent / "data" / "output"))
+_UPLOAD_TMP = Path(_BACKEND_DIR.parent / "data" / "tmp").resolve()
 _MAX_CONCURRENCY = int(os.getenv("MAX_BATCH_CONCURRENCY", "5"))
 
 
@@ -55,7 +65,7 @@ async def upload_contract(file: UploadFile = File(...)):
 
     start = time.time()
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         doc    = await loop.run_in_executor(None, extract_pdf, tmp_path)
         chunks = await loop.run_in_executor(None, chunk_document, doc)
         result = await loop.run_in_executor(
@@ -67,6 +77,10 @@ async def upload_contract(file: UploadFile = File(...)):
         (out_path / f"{Path(file.filename).stem}.json").write_text(
             result.model_dump_json(indent=2), encoding="utf-8"
         )
+        try:
+            save_metrics(result)
+        except Exception as exc:
+            print(f"[METRICS] Failed to save metrics: {exc}")
         return UploadResponse(success=True, filename=file.filename, data=result)
 
     except Exception as exc:
@@ -134,6 +148,18 @@ async def get_result(filename: str):
 # ──────────────────────────────────────────────
 # GET /health
 # ──────────────────────────────────────────────
+
+@router.get("/metrics/{contract_id}")
+async def get_contract_metrics(contract_id: str):
+    """
+    Per-contract report card (JSON). File: data/metrics/{contract_id}_metrics.json
+    Requires contract_id as stored in output JSON (e.g. CTR-001).
+    """
+    payload = load_metrics_file(contract_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="No metrics file for this contract. Process the contract first.")
+    return JSONResponse(content=payload.model_dump())
+
 
 @router.get("/health")
 async def health():

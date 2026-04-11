@@ -10,6 +10,7 @@ class ChunkMetadata(BaseModel):
     clause_number: Optional[str] = None
     section_title: Optional[str] = None
     page_number: int = 1
+    heading_type: Optional[str] = None  # governing_law, payment_terms, other, ...
 
 class Chunk(BaseModel):
     text: str
@@ -53,6 +54,7 @@ class Clauses(BaseModel):
     non_solicitation: BaseClause
 
 class StructuredField(BaseModel):
+    status: str = "not_found"  # present | uncertain | not_found
     raw_text: Optional[str] = None
     normalized_value: Optional[Dict[str, Any]] = None
     confidence: float
@@ -86,11 +88,13 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class ProcessingMetadata(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
-    
-    schema_version: str = "contract_intelligence_v1"
-    pipeline_version: str = "v1"
-    model_used: str = "gpt-oss-120b"
+
+    schema_version: str = "contract_intelligence_v2"
+    pipeline_version: str = "two_stage_pipeline_v1"
+    model_used: str = "llama-3.3-70b-versatile"
     processing_time_ms: int
+    extraction_stage: Optional[str] = None  # e.g. llm_simple_json
+    post_processing_stage: Optional[str] = None  # e.g. rule_engine_enrichment
 
 class ContractOutput(BaseModel):
     contract_id: str

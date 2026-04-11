@@ -4,7 +4,6 @@ export default function Hero({ stats }) {
   return (
     <>
       <div className="hero">
-        <div className="hero-eyebrow">🤖 Powered by GPT-4o-mini</div>
         <h1>Transform Legal Contracts<br/><span className="gradient">Into Structured Intelligence</span></h1>
         <p>Upload PDFs, extract clauses, identify parties, governing law, liability caps — all in seconds.</p>
       </div>
@@ -22,9 +21,12 @@ export default function Hero({ stats }) {
           <div className="stat-value purple">{stats.types}</div>
           <div className="stat-label">Contract Types</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value yellow">{stats.rate}</div>
-          <div className="stat-label">Success Rate</div>
+        <div
+          className="stat-card"
+          title="Mean of overall_confidence across saved results (model-reported, not legal accuracy)."
+        >
+          <div className="stat-value yellow">{stats.avgConfidence}</div>
+          <div className="stat-label">Avg. confidence</div>
         </div>
       </div>
     </>

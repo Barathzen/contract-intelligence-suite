@@ -1,0 +1,136 @@
+{
+  "contract_id": "CTR-001",
+  "source_metadata": {
+    "file_name": "contract_011.pdf",
+    "file_type": "pdf",
+    "processed_at": "2026-04-11T01:31:35.640289Z",
+    "language": "en",
+    "page_count": 41,
+    "ocr_used": false
+  },
+  "contract_type": {
+    "label": "Securities Agreement",
+    "confidence": 0.95,
+    "alternate_labels": []
+  },
+  "parties": [
+    {
+      "name": "The Company",
+      "role": "Client",
+      "entity_type": "Organization",
+      "confidence": 0.95
+    },
+    {
+      "name": "Sandler O’Neill",
+      "role": "Agent",
+      "entity_type": "Organization",
+      "confidence": 0.95
+    },
+    {
+      "name": "The Bank",
+      "role": "Provider",
+      "entity_type": "Organization",
+      "confidence": 0.95
+    }
+  ],
+  "clauses": {
+    "governing_law": {
+      "status": "absent",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "high",
+      "evidence_ids": []
+    },
+    "audit_rights": {
+      "status": "absent",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "medium",
+      "evidence_ids": []
+    },
+    "non_compete": {
+      "status": "absent",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "low",
+      "evidence_ids": []
+    },
+    "non_solicitation": {
+      "status": "absent",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "low",
+      "evidence_ids": []
+    }
+  },
+  "structured_fields": {
+    "jurisdiction": {
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "low",
+      "evidence_ids": []
+    },
+    "payment_terms": {
+      "raw_text": "The Company shall notify the Agent by telephone, confirmed in writing, when funds shall have been received for all the Securities.",
+      "normalized_value": {
+        "amount": null,
+        "currency": null,
+        "frequency": null,
+        "due_days": null
+      },
+      "confidence": 0.95,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-PAY-001"
+      ]
+    },
+    "notice_period": {
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "low",
+      "evidence_ids": []
+    },
+    "liability_cap": {
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.95,
+      "risk_level": "high",
+      "evidence_ids": []
+    }
+  },
+  "risk_summary": {
+    "risk_score": 85,
+    "risk_level": "high",
+    "issues": [
+      "Missing Governing Law Clause (High Risk)",
+      "Missing/Unknown Liability Cap (High Risk)",
+      "Missing Audit Rights"
+    ]
+  },
+  "confidence_summary": {
+    "overall_confidence": 0.95,
+    "low_confidence_fields": []
+  },
+  "evidence_index": [
+    {
+      "evidence_id": "EV-PAY-001",
+      "section_heading": "[CROSS_REF]. APPOINTMENT OF SANDLER O’NEILL; SALE AND DELIVERY OF THE SECURITIES; CLOSING",
+      "text_span": "The Company shall notify the Agent by telephone, confirmed in writing, when funds shall have been received for all the Securities.",
+      "page_no": 17,
+      "char_start": 0,
+      "char_end": 100
+    }
+  ],
+  "processing_metadata": {
+    "schema_version": "contract_intelligence_v1",
+    "pipeline_version": "v1",
+    "model_used": "gpt-oss-120b",
+    "processing_time_ms": 15329
+  }
+}

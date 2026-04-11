@@ -14,4 +14,6 @@ chromadb==0.5.3
 torch==2.3.0
 PyMuPDF
 pytesseract
+Pillow
 rank_bm25
+scikit-learn

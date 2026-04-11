@@ -1,11 +1,17 @@
 """
-llm_processor.py — Groq LLM extraction with RAG-retrieved context
+llm_processor.py — Two-stage extraction with RAG-retrieved context
 
 Pipeline per contract:
-  1. chunks already indexed in ChromaDB (embedder.py)
-  2. rag_retriever.retrieve_all_relevant() → top semantically-relevant chunks
-  3. classify_contract()  → Groq  → contract_type
-  4. extract_fields()     → Groq  → full structured JSON
+  1. chunks indexed in ChromaDB (embedder.py)
+  2. rag_retriever.retrieve_all_relevant() → context chunks
+  3. classify_contract() → Groq → contract type hint
+  4. Stage 1: LLM → simple JSON (text, page, status only)
+  5. Stage 2: deterministic structuring → ContractOutput (schema v2)
+
+Token budget:
+  llama-3.3-70b-versatile context window = 128k tokens
+  Free-tier daily quota is limited — we keep each call well under 4,000 input tokens.
+  GROQ_MAX_CONTEXT_CHARS env var controls context window (default 6000 chars ≈ 1500 tokens).
 """
 
 from __future__ import annotations
@@ -20,11 +26,21 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from app.models.schema import Chunk, ContractOutput
-from app.utils.helpers import normalize_boolean, normalize_currency, clean_string
+from app.models.stage1_schema import parse_stage1
+from app.services.stage2_structuring import build_contract_output_from_stage1
 
 load_dotenv()
 
 _client: Optional[Groq] = None
+
+# ── Token budget controls ──────────────────────────────────────────────────
+# ~4 chars per token. Keep total input well under 4k tokens to stay within
+# free-tier daily quota even for large PDFs.
+# Override via env: GROQ_MAX_CONTEXT_CHARS=8000 for paid plans.
+_MAX_CONTEXT_CHARS = int(os.getenv("GROQ_MAX_CONTEXT_CHARS", "6000"))
+_MAX_CLASSIFY_CHARS = int(os.getenv("GROQ_MAX_CLASSIFY_CHARS", "1500"))
+# Max chars per individual chunk — prevents one giant chunk eating the whole budget
+_MAX_CHUNK_CHARS = int(os.getenv("GROQ_MAX_CHUNK_CHARS", "600"))
 
 
 def _get_client() -> Groq:
@@ -62,122 +78,35 @@ Contract excerpt:
 {text}
 """
 
-_EXTRACTION_SYSTEM = (
-    "You are a senior legal analyst with 20 years of experience. "
-    "Extract structured information from the contract text provided. "
-    "Respond ONLY with a valid JSON object — no markdown fences, no explanation."
+_STAGE1_SYSTEM = (
+    "You extract factual snippets from legal contract excerpts. "
+    "Output ONLY valid JSON — no markdown, no commentary, no confidence scores, no risk analysis."
 )
 
-_EXTRACTION_PROMPT = """\
-Extract ALL of the requested fields from the retrieved contract sections below.
-Your response MUST be a single valid JSON object exactly mirroring this structure and keys:
+_STAGE1_PROMPT = """\
+Read the excerpts below (each block has a Page marker). Extract a SINGLE flat JSON object with EXACTLY these keys:
 
 {{
-  "contract_id": "CTR-001",
-  "contract_type": {{
-    "label": "<e.g., Service Agreement>",
-    "confidence": 0.95,
-    "alternate_labels": []
-  }},
-  "parties": [
-    {{
-      "name": "Party Name",
-      "role": "Client/Provider etc.",
-      "entity_type": "Organization/Person",
-      "confidence": 0.95
-    }}
-  ],
-  "clauses": {{
-    "governing_law": {{
-      "status": "present|absent",
-      "raw_text": "...",
-      "normalized_value": {{"state": "...", "country": "..."}},
-      "confidence": 0.95,
-      "risk_level": "low|medium|high",
-      "evidence_ids": ["EV-GL-001"]
-    }},
-    "audit_rights": {{
-      "status": "present|absent",
-      "raw_text": "...",
-      "normalized_value": null,
-      "confidence": 0.95,
-      "risk_level": "low|medium|high",
-      "evidence_ids": ["EV-AUD-001"]
-    }},
-    "non_compete": {{
-      "status": "present|absent",
-      "raw_text": "...",
-      "normalized_value": {{"duration_months": 12}},
-      "confidence": 0.95,
-      "risk_level": "low|medium|high",
-      "evidence_ids": ["EV-NC-001"]
-    }},
-    "non_solicitation": {{
-      "status": "present|absent",
-      "raw_text": "...",
-      "normalized_value": {{"duration_months": 12}},
-      "confidence": 0.95,
-      "risk_level": "low|medium|high",
-      "evidence_ids": ["EV-NS-001"]
-    }}
-  }},
-  "structured_fields": {{
-    "jurisdiction": {{
-      "raw_text": "...",
-      "normalized_value": {{"state": "...", "country": "..."}},
-      "confidence": 0.95,
-      "risk_level": "low",
-      "evidence_ids": ["EV-JUR-001"]
-    }},
-    "payment_terms": {{
-      "raw_text": "...",
-      "normalized_value": {{"amount": 5000, "currency": "USD", "frequency": "monthly", "due_days": 15}},
-      "confidence": 0.95,
-      "risk_level": "low",
-      "evidence_ids": ["EV-PAY-001"]
-    }},
-    "notice_period": {{
-      "raw_text": "...",
-      "normalized_value": {{"days": 30, "type": "written"}},
-      "confidence": 0.95,
-      "risk_level": "low",
-      "evidence_ids": ["EV-NOT-001"]
-    }},
-    "liability_cap": {{
-      "raw_text": "...",
-      "normalized_value": {{"type": "limited", "multiplier": 2}},
-      "confidence": 0.95,
-      "risk_level": "medium",
-      "evidence_ids": ["EV-LIAB-001"]
-    }}
-  }},
-  "risk_summary": {{
-    "risk_score": 50,
-    "risk_level": "medium",
-    "issues": []
-  }},
-  "confidence_summary": {{
-    "overall_confidence": 0.95,
-    "low_confidence_fields": []
-  }},
-  "evidence_index": [
-    {{
-      "evidence_id": "EV-GL-001",
-      "section_heading": "...",
-      "text_span": "...",
-      "page_no": 1,
-      "char_start": 0,
-      "char_end": 100
-    }}
-  ]
+  "contract_type": "<one label: Service Agreement, IP Agreement, Lease Agreement, Supply Agreement, Employment Agreement, Non-Disclosure Agreement, License Agreement, Partnership Agreement, Loan Agreement, or Other>",
+  "parties": [{{"name": "<string>", "role": "<string or 'unspecified'>"}}],
+  "governing_law": {{"text": <string or null>, "page": <integer or null>, "status": "present"|"absent"|"uncertain"}},
+  "audit_rights": {{"text": <string or null>, "page": <integer or null>, "status": "present"|"absent"|"uncertain"}},
+  "non_compete": {{"text": <string or null>, "page": <integer or null>, "status": "present"|"absent"|"uncertain"}},
+  "non_solicitation": {{"text": <string or null>, "page": <integer or null>, "status": "present"|"absent"|"uncertain"}},
+  "jurisdiction": {{"text": <string or null>, "page": <integer or null>}},
+  "payment_terms": {{"text": <string or null>, "page": <integer or null>}},
+  "notice_period": {{"text": <string or null>, "page": <integer or null>}},
+  "liability_cap": {{"text": <string or null>, "page": <integer or null>}}
 }}
 
-RULES:
-- `evidence_index`: MUST include every single piece of evidence referenced by `evidence_ids`.
-- `text_span` MUST be the exact verbatim substring extracted from the context.
-- Use `null` instead of missing keys if the data does not exist, but maintain the structure.
+Rules:
+1. Quote verbatim clause text when present; otherwise null.
+2. For clause fields, use status "absent" if the clause is not in the excerpts; "uncertain" if weak/indirect.
+3. page must match the [Page: N] line from the excerpt when the quote comes from that block; else null.
+4. parties: include signatories named in the excerpts (may be empty array).
+5. Do NOT add any other keys. Do NOT nest confidence, risk, or normalized structures.
 
-Retrieved contract sections:
+Excerpts:
 {context}
 """
 
@@ -207,6 +136,7 @@ def _llm_call(
     user: str,
     retries: int = 3,
     temperature: float = 0.0,
+    max_tokens: int = 3000,
 ) -> Dict[str, Any]:
     client = _get_client()
     last_err: Exception = RuntimeError("No attempts made")
@@ -221,7 +151,7 @@ def _llm_call(
                 ],
                 temperature=temperature,
                 response_format={"type": "json_object"},
-                max_tokens=3000,
+                max_tokens=max_tokens,
             )
             raw = response.choices[0].message.content or "{}"
             return _parse_json(raw)
@@ -230,9 +160,23 @@ def _llm_call(
             time.sleep(1.0 * (attempt + 1))
         except Exception as e:
             last_err = e
-            wait = 2.0 * (attempt + 1)
-            print(f"[LLM] Attempt {attempt+1} failed: {e}. Retrying in {wait}s…")
-            time.sleep(wait)
+            err_str = str(e)
+            # Detect daily token limit (TPD) — retrying won't help, fail immediately
+            if "rate_limit_exceeded" in err_str and "tokens per day" in err_str.lower():
+                raise RuntimeError(
+                    "[RATE LIMIT] Daily token quota (TPD) exceeded. "
+                    "Wait until midnight UTC or upgrade your Groq plan. "
+                    "Your contract was NOT processed."
+                )
+            # Detect per-minute rate limit — wait longer before retry
+            if "rate_limit_exceeded" in err_str:
+                wait = 30.0  # wait 30s for per-minute limits
+                print(f"[LLM] Rate limited (attempt {attempt+1}). Waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                wait = 2.0 * (attempt + 1)
+                print(f"[LLM] Attempt {attempt+1} failed: {err_str[:100]}. Retrying in {wait}s...")
+                time.sleep(wait)
 
     raise RuntimeError(f"Groq call failed after {retries} attempts: {last_err}")
 
@@ -241,16 +185,25 @@ def _llm_call(
 # Format RAG-retrieved chunks into context
 # ──────────────────────────────────────────────
 
-def _format_context(chunks: List[Chunk], max_chars: int = 14000) -> str:
+def _format_context(chunks: List[Chunk], max_chars: int = _MAX_CONTEXT_CHARS) -> str:
+    """
+    Build a context string from retrieved chunks, respecting the token budget.
+    Each chunk is truncated to _MAX_CHUNK_CHARS so no single chunk dominates.
+    Stops adding chunks once max_chars is reached.
+    """
     parts = []
     total = 0
     for c in chunks:
+        # Truncate individual chunk text to avoid one huge chunk eating the budget
+        chunk_text = c.text[:_MAX_CHUNK_CHARS]
+        if len(c.text) > _MAX_CHUNK_CHARS:
+            chunk_text += "… [truncated]"
         header = (
             f"[Section: {c.metadata.section_title or 'General'} | "
             f"Clause: {c.metadata.clause_number or '—'} | "
             f"Page: {c.metadata.page_number}]"
         )
-        block = f"{header}\n{c.text}"
+        block = f"{header}\n{chunk_text}"
         if total + len(block) > max_chars:
             break
         parts.append(block)
@@ -267,15 +220,13 @@ def classify_contract(first_pages_text: str) -> str:
     try:
         result = _llm_call(
             system=_CLASSIFICATION_SYSTEM,
-            user=_CLASSIFICATION_PROMPT.format(text=first_pages_text[:3000]),
+            user=_CLASSIFICATION_PROMPT.format(text=first_pages_text[:_MAX_CLASSIFY_CHARS]),
         )
         return str(result.get("contract_type", "Other"))
     except Exception as e:
         print(f"[LLM] Classification failed: {e}")
         return "Other"
 
-
-import datetime
 
 def extract_fields_with_rag(
     source_file: str,
@@ -285,85 +236,53 @@ def extract_fields_with_rag(
 ) -> ContractOutput:
     from app.services.rag_retriever import retrieve_all_relevant
 
+    # Fewer chunks per field = fewer tokens. RAG + RRF means quality stays high.
     retrieved_chunks = retrieve_all_relevant(
         source_file=source_file,
-        top_k_per_field=4,
+        top_k_per_field=3,
         deduplicate=True,
     )
 
     context = _format_context(retrieved_chunks)
-    error_msg: Optional[str] = None
-    raw: Dict[str, Any] = {}
+    estimated_tokens = len(context) // 4
+    print(f"[LLM] Context: {len(context)} chars (~{estimated_tokens} tokens) from {len(retrieved_chunks)} chunks")
+
+    raw_stage1: Dict[str, Any] = {}
 
     try:
-        raw = _llm_call(
-            system=_EXTRACTION_SYSTEM,
-            user=_EXTRACTION_PROMPT.format(context=context),
+        raw_stage1 = _llm_call(
+            system=_STAGE1_SYSTEM,
+            user=_STAGE1_PROMPT.format(context=context),
+            max_tokens=1200,
         )
     except Exception as e:
-        error_msg = str(e)
-        
-    contract_id = raw.get("contract_id", "CTR-001")
+        print(f"[LLM] Stage-1 extraction failed: {str(e)[:120]}")
 
-    # Construct Source Metadata
-    source_metadata = {
-        "file_name": source_file.split("/")[-1],
-        "file_type": "pdf",
-        "processed_at": datetime.datetime.now().isoformat() + "Z",
-        "language": "en",
-        "page_count": page_count,
-        "ocr_used": False
-    }
-    
-    # Construct Processing Metadata
-    processing_metadata = {
-        "schema_version": "contract_intelligence_v1",
-        "pipeline_version": "v1",
-        "model_used": "gpt-oss-120b",
-        "processing_time_ms": int(processing_time * 1000)
-    }
+    file_stem = source_file.split("/")[-1].split("\\")[-1]
+    contract_id = f"CTR-{file_stem.replace('.pdf', '').replace('contract_', '')}"
 
-    raw["source_metadata"] = source_metadata
-    raw["processing_metadata"] = processing_metadata
-    
-    if "contract_type" not in raw or not isinstance(raw["contract_type"], dict):
-        raw["contract_type"] = {"label": contract_type, "confidence": 1.0, "alternate_labels": []}
-        
-    if "parties" not in raw: raw["parties"] = []
-    
-    empty_clause = {"status": "absent", "raw_text": None, "normalized_value": None, "confidence": 0.0, "risk_level": "low", "evidence_ids": []}
-    if "clauses" not in raw:
-        raw["clauses"] = {"governing_law": empty_clause, "audit_rights": empty_clause, "non_compete": empty_clause, "non_solicitation": empty_clause}
-
-    empty_field = {"raw_text": "", "normalized_value": None, "confidence": 0.0, "risk_level": "low", "evidence_ids": []}
-    if "structured_fields" not in raw:
-        raw["structured_fields"] = {"jurisdiction": empty_field, "payment_terms": empty_field, "notice_period": empty_field, "liability_cap": empty_field}
-
-    if "risk_summary" not in raw:
-        raw["risk_summary"] = {"risk_score": 0, "risk_level": "low", "issues": []}
-
-    if "confidence_summary" not in raw:
-        raw["confidence_summary"] = {"overall_confidence": 0.0, "low_confidence_fields": []}
-        
-    if "evidence_index" not in raw:
-        raw["evidence_index"] = []
-
+    s1 = parse_stage1(raw_stage1)
     try:
-        return ContractOutput(**raw)
-    except Exception as e:
-        print("[LLM Schema ValidationError]:", e)
-        # return a generic version if pydantic map fails
-        return ContractOutput(
+        return build_contract_output_from_stage1(
+            s1,
             contract_id=contract_id,
-            source_metadata=source_metadata,
-            contract_type=raw["contract_type"],
-            parties=raw["parties"],
-            clauses=raw["clauses"],
-            structured_fields=raw["structured_fields"],
-            risk_summary=raw["risk_summary"],
-            confidence_summary=raw["confidence_summary"],
-            evidence_index=raw["evidence_index"],
-            processing_metadata=processing_metadata
+            file_stem=file_stem,
+            page_count=page_count,
+            processing_time_ms=int(processing_time * 1000),
+            language="en",
+            classified_fallback_type=contract_type,
+        )
+    except Exception as e:
+        print(f"[Stage2] Structuring failed: {e}")
+        s1 = parse_stage1({})
+        return build_contract_output_from_stage1(
+            s1,
+            contract_id=contract_id,
+            file_stem=file_stem,
+            page_count=page_count,
+            processing_time_ms=int(processing_time * 1000),
+            language="en",
+            classified_fallback_type=contract_type,
         )
 
 
@@ -382,8 +301,10 @@ def process_document_rag(
       1. Index chunks into vector store
       2. Classify contract type (Groq on first pages)
       3. RAG-retrieve relevant chunks → Groq extract fields
+      4. Risk Evaluation (Rule Engine)
     """
     from app.services.embedder import index_document
+    from app.services.risk_engine import evaluate_risk
 
     # Step 1: Index this document into ChromaDB
     n_indexed = index_document(source_file=source_file, chunks=chunks)
@@ -391,13 +312,18 @@ def process_document_rag(
 
     # Step 2: Classify
     contract_type = classify_contract(doc.first_pages_text(3))
-    print(f"[RAG] '{source_file}' → {contract_type}")
+    print(f"[RAG] '{source_file}' -> {contract_type}")
 
     # Step 3: Extract via RAG
     elapsed = time.time() - start_time
-    return extract_fields_with_rag(
+    output = extract_fields_with_rag(
         source_file=source_file,
         contract_type=contract_type,
         page_count=doc.page_count,
         processing_time=elapsed,
     )
+
+    # Step 4: Evaluate Risk Post-Processing
+    output = evaluate_risk(output)
+
+    return output

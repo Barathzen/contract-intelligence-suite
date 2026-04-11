@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import './Uploader.css';
 
-export default function Uploader({ onUploadSuccess, onViewDetails }) {
+export default function Uploader({ onUploadSuccess, onViewJson, onViewRoleViews }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -86,9 +86,14 @@ export default function Uploader({ onUploadSuccess, onViewDetails }) {
               {field('Non-Compete', result.clauses?.non_compete?.status === 'present' ? '✅ Yes' : '❌ No')}
               {field('Audit Rights', result.clauses?.audit_rights?.status === 'present' ? '✅ Yes' : '❌ No')}
             </div>
-            <button className="btn btn-secondary btn-full" style={{ marginTop: '8px' }} onClick={() => onViewDetails(result)}>
-              View Full JSON
-            </button>
+            <div className="upload-result-actions">
+              <button className="btn btn-secondary btn-full" type="button" onClick={() => onViewJson?.(result)}>
+                View Full JSON
+              </button>
+              <button className="btn btn-secondary btn-full" type="button" onClick={() => onViewRoleViews?.(result)}>
+                Role-based views
+              </button>
+            </div>
           </div>
         )}
       </div>

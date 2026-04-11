@@ -11,9 +11,15 @@ import pytesseract
 from PIL import Image
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 from app.utils.helpers import sanitize_text
+from app.services.preprocessor import apply_advanced_preprocessing, extract_defined_terms
+from app.services.legal_preprocess import (
+    apply_page_text_pipeline,
+    fingerprint_page_text,
+    detect_language,
+)
 
 @dataclass
 class PageContent:
@@ -25,10 +31,18 @@ class PageContent:
 class DocumentContent:
     filepath: str
     pages: List[PageContent] = field(default_factory=list)
+    defined_terms: Dict[str, str] = field(default_factory=dict)
+    detected_language: str = "unknown"
 
     @property
     def full_text(self) -> str:
-        return "\n\n".join(p.text for p in self.pages)
+        body = "\n\n".join(p.text for p in self.pages)
+        if self.defined_terms:
+            defs_block = "\n\n[GLOBAL DEFINED TERMS]:\n"
+            for term, context in self.defined_terms.items():
+                defs_block += f"- {term} (Context: {context})\n"
+            body += defs_block
+        return body
 
     @property
     def page_count(self) -> int:
@@ -82,6 +96,8 @@ def extract_pdf(filepath: str | Path) -> DocumentContent:
 
                     text = _strip_headers_footers(text)
                     text = sanitize_text(text)
+                    text = apply_advanced_preprocessing(text)
+                    text = apply_page_text_pipeline(text)
 
                     # 3. Table extraction
                     tables = []
@@ -93,6 +109,26 @@ def extract_pdf(filepath: str | Path) -> DocumentContent:
 
                     if text:
                         doc.pages.append(PageContent(page_num=page_num, text=text, tables=tables))
+
+        # Drop exact-duplicate pages (common in PDF export artifacts)
+        _seen_fp: set = set()
+        deduped_pages: List[PageContent] = []
+        for p in doc.pages:
+            fp = fingerprint_page_text(p.text)
+            if fp in _seen_fp:
+                continue
+            _seen_fp.add(fp)
+            deduped_pages.append(
+                PageContent(page_num=len(deduped_pages) + 1, text=p.text, tables=p.tables)
+            )
+        doc.pages = deduped_pages
+
+        body_for_terms = "\n".join(p.text for p in doc.pages) if doc.pages else ""
+
+        # Global definitions extraction
+        doc.defined_terms = extract_defined_terms(body_for_terms)
+        if doc.pages:
+            doc.detected_language = detect_language(body_for_terms)
 
     except Exception as exc:
         raise ValueError(f"Failed to extract PDF '{filepath.name}': {exc}") from exc

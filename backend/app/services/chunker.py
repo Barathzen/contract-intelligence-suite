@@ -5,10 +5,18 @@ chunker.py  — Section/clause-aware text chunking
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
+
+from difflib import SequenceMatcher
 
 from app.models.schema import Chunk, ChunkMetadata
 from app.services.extractor import DocumentContent
+from app.services.legal_preprocess import (
+    classify_heading,
+    deduplicate_clauses,
+    detect_clauses,
+    filter_boilerplate,
+)
 
 
 # ──────────────────────────────────────────────
@@ -32,6 +40,11 @@ _SECTION_RE = [re.compile(p, re.MULTILINE) for p in _SECTION_PATTERNS]
 _MIN_CHUNK_CHARS = 80
 # Max characters before we split a giant chunk further
 _MAX_CHUNK_CHARS = 4000
+
+
+def _document_body(doc: DocumentContent) -> str:
+    """Structural text only (no defined-terms appendix)."""
+    return "\n\n".join(p.text for p in doc.pages)
 
 
 def _find_sections(text: str):
@@ -104,6 +117,36 @@ def _page_for_char(char_pos: int, page_map) -> int:
     return 1  # default
 
 
+def _dedupe_similar_chunks(chunks: List[Chunk], threshold: float = 0.95) -> List[Chunk]:
+    kept: List[Chunk] = []
+    for c in chunks:
+        if any(
+            SequenceMatcher(None, (c.text or "")[:2000], (k.text or "")[:2000]).ratio() >= threshold
+            for k in kept
+        ):
+            continue
+        kept.append(c)
+    return kept
+
+
+def _make_chunk(
+    text: str,
+    clause_num: Optional[str],
+    title: str,
+    page_num: int,
+) -> Chunk:
+    ht = classify_heading(title or text[:120])
+    return Chunk(
+        text=text,
+        metadata=ChunkMetadata(
+            clause_number=clause_num,
+            section_title=title or "Untitled Section",
+            page_number=page_num,
+            heading_type=ht,
+        ),
+    )
+
+
 # ──────────────────────────────────────────────
 # Public API
 # ──────────────────────────────────────────────
@@ -111,30 +154,31 @@ def _page_for_char(char_pos: int, page_map) -> int:
 def chunk_document(doc: DocumentContent) -> List[Chunk]:
     """
     Split a DocumentContent into semantically meaningful Chunk objects,
-    each tagged with clause number, section title, and page number.
+    each tagged with clause number, section title, page number, and heading_type.
     """
-    full_text = doc.full_text
+    full_text = _document_body(doc)
     page_map = _build_page_map(doc)
     sections = _find_sections(full_text)
 
     chunks: List[Chunk] = []
 
     if not sections:
-        # Fallback: paragraph-level chunking
-        paras = _split_into_paragraphs(full_text)
-        for idx, para in enumerate(paras):
-            if len(para) < _MIN_CHUNK_CHARS:
+        # Clause-boundary detection + boilerplate filter + dedupe, then chunk
+        raw_clauses = detect_clauses(full_text)
+        raw_clauses = filter_boilerplate(raw_clauses)
+        raw_clauses = deduplicate_clauses(raw_clauses)
+        if not raw_clauses:
+            raw_clauses = [full_text] if full_text.strip() else []
+
+        for ctext in raw_clauses:
+            if len(ctext.strip()) < _MIN_CHUNK_CHARS:
                 continue
-            for sub in _chunk_text(para):
-                chunks.append(Chunk(
-                    text=sub,
-                    metadata=ChunkMetadata(
-                        clause_number=None,
-                        section_title=f"Paragraph {idx + 1}",
-                        page_number=1,
-                    )
-                ))
-        return chunks
+            lines = [ln for ln in ctext.splitlines() if ln.strip()]
+            title = (lines[0][:120] if lines else "Clause")[:120]
+            for sub in _chunk_text(ctext):
+                chunks.append(_make_chunk(sub, None, title, 1))
+
+        return _dedupe_similar_chunks(chunks)
 
     # Section-based chunking
     for i, (pos, clause_num, title) in enumerate(sections):
@@ -149,13 +193,6 @@ def chunk_document(doc: DocumentContent) -> List[Chunk]:
         page_num = _page_for_char(pos, page_map)
 
         for sub in _chunk_text(body):
-            chunks.append(Chunk(
-                text=sub,
-                metadata=ChunkMetadata(
-                    clause_number=clause_num or None,
-                    section_title=title or "Untitled Section",
-                    page_number=page_num,
-                )
-            ))
+            chunks.append(_make_chunk(sub, clause_num or None, title or "Untitled Section", page_num))
 
-    return chunks
+    return _dedupe_similar_chunks(chunks)

@@ -1,15 +1,15 @@
 """
-embedder.py — Build and manage ChromaDB vector store from contract chunks using Groq Embeddings
+embedder.py — Build and manage ChromaDB vector store from contract chunks using all-mpnet-base-v2
 """
 
 from __future__ import annotations
 
 import os
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
 from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from groq import Groq
 
 load_dotenv()
 
@@ -17,25 +17,28 @@ _VECTORSTORE_DIR = os.getenv(
     "VECTORSTORE_DIR",
     "/mnt/B89EC7B79EC76D06/contract-intelligence/data/vectorstore"
 )
-_EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text-v1.5")
 
 # Lazy singletons
-_client: Optional[Groq] = None
 _chroma_client = None
 _collection = None
 
-COLLECTION_NAME = "contract_chunks_groq"
+COLLECTION_NAME = "contract_chunks_mpnet"
 
 
 from sentence_transformers import SentenceTransformer
 
+# all-mpnet-base-v2 produces 768-dim embeddings (vs 384 for MiniLM)
+# It scores significantly higher on semantic similarity benchmarks
+_SENTENCE_MODEL = "all-mpnet-base-v2"
 _embedder_model = None
 
-def _get_embedder():
+
+def _get_embedder() -> SentenceTransformer:
     global _embedder_model
     if _embedder_model is None:
-        print("[RAG] Loading local MiniLM model...")
-        _embedder_model = SentenceTransformer("all-MiniLM-L6-v2")
+        print(f"[RAG] Loading embedding model '{_SENTENCE_MODEL}'...")
+        _embedder_model = SentenceTransformer(_SENTENCE_MODEL)
+        print(f"[RAG] Model loaded — embedding dim: {_embedder_model.get_sentence_embedding_dimension()}")
     return _embedder_model
 
 
@@ -43,23 +46,25 @@ def _get_collection():
     global _chroma_client, _collection
     if _collection is None:
         import chromadb
+        from chromadb.config import Settings
         Path(_VECTORSTORE_DIR).mkdir(parents=True, exist_ok=True)
-        _chroma_client = chromadb.PersistentClient(path=_VECTORSTORE_DIR)
-        
-        # We change the collection name to isolate Groq embeddings from previous local ones
+        _chroma_client = chromadb.PersistentClient(
+            path=_VECTORSTORE_DIR,
+            settings=Settings(anonymized_telemetry=False)
+        )
+        # Collection name includes model slug so old MiniLM data is not mixed in
         _collection = _chroma_client.get_or_create_collection(
             name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine", "model": _EMBED_MODEL},
+            metadata={"hnsw:space": "cosine", "model": _SENTENCE_MODEL},
         )
         print(f"[RAG] ChromaDB collection '{COLLECTION_NAME}' ready — {_collection.count()} chunks")
     return _collection
 
 
 def _embed_texts(texts: List[str]) -> List[List[float]]:
-    """Get embeddings from local MiniLM."""
+    """Embed a list of texts using all-mpnet-base-v2 (768-dim)."""
     model = _get_embedder()
-    embeddings = model.encode(texts, show_progress_bar=False)
-    # Convert numpy arrays to lists of float
+    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
     return [vec.tolist() for vec in embeddings]
 
 
@@ -93,17 +98,15 @@ def index_document(source_file: str, chunks) -> int:
             "clause_number": c.metadata.clause_number or "",
             "section_title": c.metadata.section_title or "",
             "page_number": c.metadata.page_number,
+            "heading_type": c.metadata.heading_type or "",
         }
         for c in chunks
     ]
 
-    # Batch embed via Groq
-    # Note: Groq might have limits on input size per request, but usually 
-    # it can handle dozens of small-to-medium chunks at once.
-    # We'll batch in chunks of 50 just to be safe.
+    # Batch embed in groups of 50 to keep memory usage predictable
     ids = [f"{source_file}::chunk::{i}" for i in range(len(texts))]
     all_embeddings = []
-    
+
     BATCH_SIZE = 50
     for i in range(0, len(texts), BATCH_SIZE):
         batch_texts = texts[i : i + BATCH_SIZE]

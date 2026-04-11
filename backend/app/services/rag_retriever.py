@@ -72,6 +72,7 @@ def retrieve_all_relevant(
 
 
 from rank_bm25 import BM25Okapi
+import traceback
 
 def _retrieve(query: str, source_file: str, top_k: int = 6) -> List[Chunk]:
     """Core retrieval: Fetch all chunks for source_file, embed query, run BM25, and use RRF."""
@@ -80,50 +81,81 @@ def _retrieve(query: str, source_file: str, top_k: int = 6) -> List[Chunk]:
 
         # Get the query vector
         query_vecs = _embed_texts([query])
+        if not query_vecs:
+            raise RuntimeError("Embedding service returned empty vectors for query")
         query_vec = query_vecs[0]
 
         # 1. First, fetch ALL chunks for the given source file from ChromaDB
-        # We need all of them to build a local BM25 index on the fly.
         results = col.get(
             where={"source_file": source_file},
             include=["documents", "metadatas", "embeddings"],
         )
 
-        docs = results.get("documents", [])
-        metas = results.get("metadatas", [])
-        embeddings = results.get("embeddings", [])
+        docs = results.get("documents") or []
+        metas = results.get("metadatas") or []
+        embeddings = results.get("embeddings") or []
 
         if not docs:
             return []
 
-        # Build Chunk objects
+        n_results = max(1, min(top_k * 2, len(docs)))  # clamp: never exceed available docs
+
+        # Build Chunk objects (guard against metadata length mismatch)
         all_chunks: List[Chunk] = []
-        for text, meta in zip(docs, metas):
+        for idx, text in enumerate(docs):
+            meta = metas[idx] if idx < len(metas) else {}
+            page_num = 1
+            try:
+                page_num = int(meta.get("page_number", 1))
+            except Exception:
+                page_num = 1
             all_chunks.append(Chunk(
                 text=text,
                 metadata=ChunkMetadata(
                     clause_number=meta.get("clause_number") or None,
                     section_title=meta.get("section_title") or None,
-                    page_number=int(meta.get("page_number", 1)),
+                    page_number=page_num,
+                    heading_type=meta.get("heading_type") or None,
                 )
             ))
 
-        # 2. Compute Semantic similarities (cosine) manually since we fetched all
-        # Alternatively, we could just query Chroma for semantic ranking, 
-        # but since we need all docs for BM25, we can just query Chroma for exact ranks.
+        # 2. Semantic ranking via ChromaDB query
         semantic_results = col.query(
             query_embeddings=[query_vec],
-            n_results=len(docs), # get all ranked
+            n_results=n_results,
             where={"source_file": source_file},
             include=["documents", "distances"]
         )
 
-        semantic_ranked_docs = semantic_results.get("documents", [[]])[0]
+        # semantic_results['documents'] may be nested or flat depending on Chroma client
+        sem_docs = semantic_results.get("documents")
+        if not sem_docs:
+            semantic_ranked_docs = []
+        else:
+            # If it's a list-of-lists, take first; else if flat list, use it
+            if isinstance(sem_docs, list) and len(sem_docs) > 0 and isinstance(sem_docs[0], list):
+                semantic_ranked_docs = sem_docs[0]
+            else:
+                semantic_ranked_docs = sem_docs
+
         # Build map: text -> semantic rank (1-indexed)
         semantic_ranks = {text: rank + 1 for rank, text in enumerate(semantic_ranked_docs)}
 
-        # 3. Compute BM25 scores
-        tokenized_corpus = [doc.lower().split() for doc in docs]
+        # 3. Compute BM25 scores (guard tokenization)
+        tokenized_corpus = []
+        for d in docs:
+            try:
+                tokenized_corpus.append(d.lower().split())
+            except Exception:
+                tokenized_corpus.append([])
+
+        if not any(tokenized_corpus):
+            # fallback: return semantic top-k
+            return [
+                Chunk(text=t, metadata=ChunkMetadata(page_number=1, heading_type=None))
+                for t in semantic_ranked_docs[:top_k]
+            ]
+
         bm25 = BM25Okapi(tokenized_corpus)
         tokenized_query = query.lower().split()
         bm25_scores = bm25.get_scores(tokenized_query)
@@ -133,7 +165,6 @@ def _retrieve(query: str, source_file: str, top_k: int = 6) -> List[Chunk]:
         bm25_ranks = {doc: rank + 1 for rank, (doc, score) in enumerate(bm25_ranked)}
 
         # 4. Reciprocal Rank Fusion (RRF)
-        # RRF_score = 1 / (k + semantic_rank) + 1 / (k + bm25_rank)
         RRF_K = 60
         rrf_scores = []
         for i, chunk in enumerate(all_chunks):
@@ -144,10 +175,10 @@ def _retrieve(query: str, source_file: str, top_k: int = 6) -> List[Chunk]:
 
         # Sort by best RRF score
         rrf_scores.sort(key=lambda x: x[0], reverse=True)
-        
         # Return top-k
         return [chunk for score, chunk in rrf_scores[:top_k]]
 
     except Exception as exc:
         print(f"[RAG] Retrieval error for '{source_file}': {exc}")
+        traceback.print_exc()
         return []

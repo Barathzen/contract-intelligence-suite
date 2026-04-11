@@ -1,0 +1,71 @@
+{
+  "contract_id": "CTR-010",
+  "metrics": {
+    "extraction_accuracy": null,
+    "field_level_scores": {
+      "clauses.governing_law": {
+        "status": "unlabeled",
+        "confidence": 0.28,
+        "score": null
+      },
+      "clauses.audit_rights": {
+        "status": "unlabeled",
+        "confidence": 0.28,
+        "score": null
+      },
+      "clauses.non_compete": {
+        "status": "unlabeled",
+        "confidence": 0.28,
+        "score": null
+      },
+      "clauses.non_solicitation": {
+        "status": "unlabeled",
+        "confidence": 0.28,
+        "score": null
+      },
+      "structured_fields.jurisdiction": {
+        "status": "unlabeled",
+        "confidence": 0.27,
+        "score": null
+      },
+      "structured_fields.payment_terms": {
+        "status": "unlabeled",
+        "confidence": 0.27,
+        "score": null
+      },
+      "structured_fields.notice_period": {
+        "status": "unlabeled",
+        "confidence": 0.27,
+        "score": null
+      },
+      "structured_fields.liability_cap": {
+        "status": "unlabeled",
+        "confidence": 0.27,
+        "score": null
+      }
+    },
+    "precision": null,
+    "recall": null,
+    "f1_score": null,
+    "grounding_score": 1.0,
+    "avg_confidence": 0.275,
+    "loss": null,
+    "loss_weighted": 0.5075
+  },
+  "evaluated_with_ground_truth": false,
+  "ground_truth_source": null,
+  "error_signals": {
+    "low_confidence_fields": [
+      "clauses.governing_law",
+      "clauses.audit_rights",
+      "clauses.non_compete",
+      "clauses.non_solicitation",
+      "structured_fields.jurisdiction",
+      "structured_fields.payment_terms",
+      "structured_fields.notice_period",
+      "structured_fields.liability_cap"
+    ],
+    "mismatch_or_wrong_fields": [],
+    "missing_evidence_fields": []
+  }
+}

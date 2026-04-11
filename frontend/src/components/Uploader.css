@@ -21,6 +21,12 @@
 #upload-result {
   margin-top: 16px;
 }
+.upload-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
 .result-preview {
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 16px;
