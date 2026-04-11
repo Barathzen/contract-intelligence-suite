@@ -1,0 +1,154 @@
+{
+  "contract_id": "CTR-007",
+  "source_metadata": {
+    "file_name": "contract_007.pdf",
+    "file_type": "pdf",
+    "processed_at": "2026-04-11T02:22:04.091364+00:00",
+    "language": "en",
+    "page_count": 6,
+    "ocr_used": false
+  },
+  "contract_type": {
+    "label": "Service Agreement",
+    "confidence": 0.92,
+    "alternate_labels": []
+  },
+  "parties": [
+    {
+      "name": "NETWORK 1 FINANCIAL, INC.",
+      "role": "Network 1",
+      "entity_type": "Organization",
+      "confidence": 0.86
+    },
+    {
+      "name": "Payment Data Systems, Inc.",
+      "role": "AFFILIATE",
+      "entity_type": "Organization",
+      "confidence": 0.86
+    }
+  ],
+  "clauses": {
+    "governing_law": {
+      "status": "present",
+      "raw_text": "All disputes or claims by Payment Data Systems hereunder shall be resolved by arbitration in McLean, Virginia, pursuant to the rules of the American Arbitration Association. All disputes or claims by NETWORK 1 hereunder shall be resolved by arbitration in San Antonio, Texas, pursuant to the rules of the American Arbitration Association.",
+      "normalized_value": {
+        "jurisdiction_name": "All disputes or claims by Payment Data Systems hereunder shall be resolved by arbitration in McLean, Virginia, pursuant ",
+        "country": "USA"
+      },
+      "confidence": 0.9,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-GL-001"
+      ]
+    },
+    "audit_rights": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.28,
+      "risk_level": "medium",
+      "evidence_ids": []
+    },
+    "non_compete": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.28,
+      "risk_level": "medium",
+      "evidence_ids": []
+    },
+    "non_solicitation": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.28,
+      "risk_level": "medium",
+      "evidence_ids": []
+    }
+  },
+  "structured_fields": {
+    "jurisdiction": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.27,
+      "risk_level": null,
+      "evidence_ids": []
+    },
+    "payment_terms": {
+      "status": "present",
+      "raw_text": "The Affiliate's Fee payable pursuant to this agreement shall be payable as outlined in Exhibit A. All payments to Affiliate are subject to Network 1 receipt of all amounts payable to Network 1 by the Member Bank with respect to the transaction giving rise to Affiliate's Fee.",
+      "normalized_value": {
+        "currency": "USD"
+      },
+      "confidence": 0.89,
+      "risk_level": null,
+      "evidence_ids": [
+        "EV-PAY-001"
+      ]
+    },
+    "notice_period": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.27,
+      "risk_level": null,
+      "evidence_ids": []
+    },
+    "liability_cap": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.27,
+      "risk_level": "high",
+      "evidence_ids": []
+    }
+  },
+  "risk_summary": {
+    "risk_score": 60,
+    "risk_level": "medium",
+    "issues": [
+      "[+30] Liability cap not found — financial exposure is uncapped by default (High Risk)",
+      "[+15] Audit rights clause not found — no mechanism to verify counterparty compliance (Medium Risk)",
+      "[+10] Non-compete clause not found in Employment/Service agreement — competitive risk (Low-Medium Risk)",
+      "[+5] Notice period not found — termination timeline is undefined (Low Risk)"
+    ]
+  },
+  "confidence_summary": {
+    "overall_confidence": 0.43,
+    "low_confidence_fields": [
+      "audit_rights",
+      "non_compete",
+      "non_solicitation",
+      "jurisdiction",
+      "notice_period",
+      "liability_cap"
+    ]
+  },
+  "evidence_index": [
+    {
+      "evidence_id": "EV-GL-001",
+      "section_heading": "Governing Law",
+      "text_span": "All disputes or claims by Payment Data Systems hereunder shall be resolved by arbitration in McLean, Virginia, pursuant to the rules of the American Arbitration Association. All disputes or claims by NETWORK 1 hereunder shall be resolved by arbitration in San Antonio, Texas, pursuant to the rules of the American Arbitration Association.",
+      "page_no": 1,
+      "char_start": 0,
+      "char_end": 338
+    },
+    {
+      "evidence_id": "EV-PAY-001",
+      "section_heading": "Payment Terms",
+      "text_span": "The Affiliate's Fee payable pursuant to this agreement shall be payable as outlined in Exhibit A. All payments to Affiliate are subject to Network 1 receipt of all amounts payable to Network 1 by the Member Bank with respect to the transaction giving rise to Affiliate's Fee.",
+      "page_no": 1,
+      "char_start": 0,
+      "char_end": 275
+    }
+  ],
+  "processing_metadata": {
+    "schema_version": "contract_intelligence_v2",
+    "pipeline_version": "two_stage_pipeline_v1",
+    "model_used": "llama-3.1-8b-instant",
+    "processing_time_ms": 42723,
+    "extraction_stage": "llm_simple_json",
+    "post_processing_stage": "rule_engine_enrichment"
+  }
+}

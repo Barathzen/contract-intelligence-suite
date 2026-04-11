@@ -1,0 +1,170 @@
+{
+  "contract_id": "CTR-001",
+  "source_metadata": {
+    "file_name": "contract_002.pdf",
+    "file_type": "pdf",
+    "processed_at": "2026-04-11T02:19:39.263237Z",
+    "language": "en",
+    "page_count": 7,
+    "ocr_used": false
+  },
+  "contract_type": {
+    "label": "Joint Venture Agreement",
+    "confidence": 0.92,
+    "alternate_labels": []
+  },
+  "parties": [
+    {
+      "name": "Link Plus Corporation",
+      "role": "unspecified",
+      "entity_type": "Organization",
+      "confidence": 0.9
+    },
+    {
+      "name": "Axiometric, LLC",
+      "role": "unspecified",
+      "entity_type": "Organization",
+      "confidence": 0.9
+    }
+  ],
+  "clauses": {
+    "governing_law": {
+      "status": "present",
+      "raw_text": "This Agreement shall be construed and governed in accordance with the laws of the State of Maryland regardless of the place or places of its physical execution and performance.",
+      "normalized_value": {
+        "jurisdiction_name": "State of Maryland",
+        "country": "USA"
+      },
+      "confidence": 0.92,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-GL-001"
+      ]
+    },
+    "audit_rights": {
+      "status": "present",
+      "raw_text": "3.5.4 Both parties are entitled to reports of sales and to conduct periodic audits to ensure accuracy of Payments as follows:",
+      "normalized_value": null,
+      "confidence": 0.9,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-AR-001"
+      ]
+    },
+    "non_compete": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.3,
+      "risk_level": "low",
+      "evidence_ids": []
+    },
+    "non_solicitation": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.3,
+      "risk_level": "low",
+      "evidence_ids": []
+    }
+  },
+  "structured_fields": {
+    "jurisdiction": {
+      "status": "present",
+      "raw_text": "7.2 All actions, cases, suits and proceedings in connection with this Agreement shall be brought in Maryland.",
+      "normalized_value": {
+        "state": "Maryland",
+        "country": "USA",
+        "court": "Maryland courts"
+      },
+      "confidence": 0.92,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-J-001"
+      ]
+    },
+    "payment_terms": {
+      "status": "present",
+      "raw_text": "3.5.1 Payments due shall be made within 45 days of the close of each calendar quarter.",
+      "normalized_value": null,
+      "confidence": 0.9,
+      "risk_level": "low",
+      "evidence_ids": [
+        "EV-PT-001"
+      ]
+    },
+    "notice_period": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.3,
+      "risk_level": "low",
+      "evidence_ids": []
+    },
+    "liability_cap": {
+      "status": "not_found",
+      "raw_text": null,
+      "normalized_value": null,
+      "confidence": 0.3,
+      "risk_level": "high",
+      "evidence_ids": []
+    }
+  },
+  "risk_summary": {
+    "risk_score": 35,
+    "risk_level": "medium",
+    "issues": [
+      "[+30] Liability cap not found — financial exposure is uncapped by default (High Risk)",
+      "[+5] Notice period not found — termination timeline is undefined (Low Risk)"
+    ]
+  },
+  "confidence_summary": {
+    "overall_confidence": 0.73,
+    "low_confidence_fields": [
+      "non_compete",
+      "non_solicitation",
+      "notice_period",
+      "liability_cap"
+    ]
+  },
+  "evidence_index": [
+    {
+      "evidence_id": "EV-GL-001",
+      "section_heading": "TRIAL BY JURY AND SPECIFICALLY CONSENT TO THE PERSONAL",
+      "text_span": "This Agreement shall be construed and governed in accordance with the laws of the State of Maryland regardless of the place or places of its physical execution and performance.",
+      "page_no": 6,
+      "char_start": 0,
+      "char_end": 0
+    },
+    {
+      "evidence_id": "EV-AR-001",
+      "section_heading": "AUTOMATIC METER READING",
+      "text_span": "3.5.4 Both parties are entitled to reports of sales and to conduct periodic audits to ensure accuracy of Payments as follows:",
+      "page_no": 2,
+      "char_start": 0,
+      "char_end": 0
+    },
+    {
+      "evidence_id": "EV-J-001",
+      "section_heading": "ADDITIONAL PROVISIONS.",
+      "text_span": "7.2 All actions, cases, suits and proceedings in connection with this Agreement shall be brought in Maryland.",
+      "page_no": 6,
+      "char_start": 0,
+      "char_end": 0
+    },
+    {
+      "evidence_id": "EV-PT-001",
+      "section_heading": "AUTOMATIC METER READING",
+      "text_span": "3.5.1 Payments due shall be made within 45 days of the close of each calendar quarter.",
+      "page_no": 2,
+      "char_start": 0,
+      "char_end": 0
+    }
+  ],
+  "processing_metadata": {
+    "schema_version": "contract_intelligence_v1",
+    "pipeline_version": "v1",
+    "model_used": "gpt-oss-120b",
+    "processing_time_ms": 34689
+  }
+}
