@@ -11,6 +11,7 @@ class ChunkMetadata(BaseModel):
     section_title: Optional[str] = None
     page_number: int = 1
     heading_type: Optional[str] = None  # governing_law, payment_terms, other, ...
+    parent_hierarchy: List[str] = Field(default_factory=list)
 
 class Chunk(BaseModel):
     text: str
@@ -78,11 +79,11 @@ class ConfidenceSummary(BaseModel):
 
 class EvidenceItem(BaseModel):
     evidence_id: str
-    section_heading: str
-    text_span: str
-    page_no: int
-    char_start: int
-    char_end: int
+    section_heading: Optional[str] = None
+    text_span: Optional[str] = None
+    page_no: Optional[int] = 1
+    char_start: Optional[int] = 0
+    char_end: Optional[int] = 0
 
 from pydantic import BaseModel, Field, ConfigDict
 

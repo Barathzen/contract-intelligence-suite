@@ -22,24 +22,30 @@ _VECTORSTORE_DIR = os.getenv(
 _chroma_client = None
 _collection = None
 
-COLLECTION_NAME = "contract_chunks_mpnet"
+from openai import OpenAI
 
+_SENTENCE_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
-from sentence_transformers import SentenceTransformer
+_openai_client = None
 
-# all-mpnet-base-v2 produces 768-dim embeddings (vs 384 for MiniLM)
-# It scores significantly higher on semantic similarity benchmarks
-_SENTENCE_MODEL = "all-mpnet-base-v2"
-_embedder_model = None
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set. Please add it to your .env file.")
+        _openai_client = OpenAI(api_key=api_key)
+        print(f"[RAG] OpenAI Embedding Client initialized for '{_SENTENCE_MODEL}'")
+    return _openai_client
 
-
-def _get_embedder() -> SentenceTransformer:
-    global _embedder_model
-    if _embedder_model is None:
-        print(f"[RAG] Loading embedding model '{_SENTENCE_MODEL}'...")
-        _embedder_model = SentenceTransformer(_SENTENCE_MODEL)
-        print(f"[RAG] Model loaded — embedding dim: {_embedder_model.get_sentence_embedding_dimension()}")
-    return _embedder_model
+def _embed_texts(texts: List[str]) -> List[List[float]]:
+    """Embed a list of texts using explicit OpenAI SDK (bypass Chroma legacy hooks)."""
+    client = _get_openai_client()
+    response = client.embeddings.create(
+        input=texts,
+        model=_SENTENCE_MODEL
+    )
+    return [data.embedding for data in response.data]
 
 
 def _get_collection():
@@ -52,20 +58,13 @@ def _get_collection():
             path=_VECTORSTORE_DIR,
             settings=Settings(anonymized_telemetry=False)
         )
-        # Collection name includes model slug so old MiniLM data is not mixed in
+        # Using a new collection name prevents mixing 768-dim mpnet vs 1536-dim OpenAI
         _collection = _chroma_client.get_or_create_collection(
-            name=COLLECTION_NAME,
+            name="contract_chunks_openai",
             metadata={"hnsw:space": "cosine", "model": _SENTENCE_MODEL},
         )
-        print(f"[RAG] ChromaDB collection '{COLLECTION_NAME}' ready — {_collection.count()} chunks")
+        print(f"[RAG] ChromaDB collection 'contract_chunks_openai' ready — {_collection.count()} chunks")
     return _collection
-
-
-def _embed_texts(texts: List[str]) -> List[List[float]]:
-    """Embed a list of texts using all-mpnet-base-v2 (768-dim)."""
-    model = _get_embedder()
-    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
-    return [vec.tolist() for vec in embeddings]
 
 
 # ──────────────────────────────────────────────
@@ -105,21 +104,23 @@ def index_document(source_file: str, chunks) -> int:
 
     # Batch embed in groups of 50 to keep memory usage predictable
     ids = [f"{source_file}::chunk::{i}" for i in range(len(texts))]
-    all_embeddings = []
 
     BATCH_SIZE = 50
     for i in range(0, len(texts), BATCH_SIZE):
         batch_texts = texts[i : i + BATCH_SIZE]
+        batch_ids = ids[i : i + BATCH_SIZE]
+        batch_metas = metadatas[i : i + BATCH_SIZE]
         batch_embeddings = _embed_texts(batch_texts)
-        all_embeddings.extend(batch_embeddings)
+        
+        # Upsert with explicit embeddings
+        collection.add(
+            ids=batch_ids,
+            embeddings=batch_embeddings,
+            documents=batch_texts,
+            metadatas=batch_metas,
+        )
 
-    # Upsert to Chroma
-    collection.add(
-        ids=ids,
-        embeddings=all_embeddings,
-        documents=texts,
-        metadatas=metadatas,
-    )
+
 
     return len(chunks)
 

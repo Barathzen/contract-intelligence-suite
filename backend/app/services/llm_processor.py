@@ -23,7 +23,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 
 from app.models.schema import Chunk, ContractOutput
 from app.models.stage1_schema import parse_stage1
@@ -31,7 +31,7 @@ from app.services.stage2_structuring import build_contract_output_from_stage1
 
 load_dotenv()
 
-_client: Optional[Groq] = None
+_client: Optional[OpenAI] = None
 
 # ── Token budget controls ──────────────────────────────────────────────────
 # ~4 chars per token. Keep total input well under 4k tokens to stay within
@@ -43,18 +43,18 @@ _MAX_CLASSIFY_CHARS = int(os.getenv("GROQ_MAX_CLASSIFY_CHARS", "1500"))
 _MAX_CHUNK_CHARS = int(os.getenv("GROQ_MAX_CHUNK_CHARS", "600"))
 
 
-def _get_client() -> Groq:
+def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise RuntimeError("GROQ_API_KEY is not set. Please configure your .env file.")
-        _client = Groq(api_key=api_key)
+            raise RuntimeError("OPENAI_API_KEY is not set. Please configure your .env file.")
+        _client = OpenAI(api_key=api_key)
     return _client
 
 
 def _model() -> str:
-    return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
 # ──────────────────────────────────────────────
@@ -87,6 +87,7 @@ _STAGE1_PROMPT = """\
 Read the excerpts below (each block has a Page marker). Extract a SINGLE flat JSON object with EXACTLY these keys:
 
 {{
+  "chain_of_thought": "<string, briefly analyze the excerpts step-by-step before determining the fields>",
   "contract_type": "<one label: Service Agreement, IP Agreement, Lease Agreement, Supply Agreement, Employment Agreement, Non-Disclosure Agreement, License Agreement, Partnership Agreement, Loan Agreement, or Other>",
   "parties": [{{"name": "<string>", "role": "<string or 'unspecified'>"}}],
   "governing_law": {{"text": <string or null>, "page": <integer or null>, "status": "present"|"absent"|"uncertain"}},
@@ -143,16 +144,21 @@ def _llm_call(
 
     for attempt in range(retries):
         try:
-            response = client.chat.completions.create(
-                model=_model(),
-                messages=[
+            kwargs = {
+                "model": _model(),
+                "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                temperature=temperature,
-                response_format={"type": "json_object"},
-                max_tokens=max_tokens,
-            )
+                "response_format": {"type": "json_object"},
+                "max_completion_tokens": max_tokens,
+            }
+            
+            # o-series and nano models reject temperature=0.0 (they enforce deterministic limits natively)
+            if "nano" not in _model().lower() and "o1" not in _model().lower() and "o3" not in _model().lower():
+                kwargs["temperature"] = temperature
+
+            response = client.chat.completions.create(**kwargs)
             raw = response.choices[0].message.content or "{}"
             return _parse_json(raw)
         except json.JSONDecodeError as e:
@@ -160,25 +166,17 @@ def _llm_call(
             time.sleep(1.0 * (attempt + 1))
         except Exception as e:
             last_err = e
-            err_str = str(e)
-            # Detect daily token limit (TPD) — retrying won't help, fail immediately
-            if "rate_limit_exceeded" in err_str and "tokens per day" in err_str.lower():
-                raise RuntimeError(
-                    "[RATE LIMIT] Daily token quota (TPD) exceeded. "
-                    "Wait until midnight UTC or upgrade your Groq plan. "
-                    "Your contract was NOT processed."
-                )
-            # Detect per-minute rate limit — wait longer before retry
-            if "rate_limit_exceeded" in err_str:
-                wait = 30.0  # wait 30s for per-minute limits
-                print(f"[LLM] Rate limited (attempt {attempt+1}). Waiting {wait}s...")
+            err_str = str(e).lower()
+            if "rate limit" in err_str or "insufficient_quota" in err_str:
+                wait = 20.0  # Wait longer for quota/rate limits
+                print(f"[LLM] OpenAI Rate limited/Quota (attempt {attempt+1}). Waiting {wait}s...")
                 time.sleep(wait)
             else:
                 wait = 2.0 * (attempt + 1)
                 print(f"[LLM] Attempt {attempt+1} failed: {err_str[:100]}. Retrying in {wait}s...")
                 time.sleep(wait)
 
-    raise RuntimeError(f"Groq call failed after {retries} attempts: {last_err}")
+    raise RuntimeError(f"OpenAI call failed after {retries} attempts: {last_err}")
 
 
 # ──────────────────────────────────────────────
